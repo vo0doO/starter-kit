@@ -1,0 +1,32 @@
+version: v1.0
+name: check-ubuntu-host
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+blocks:
+  - name: test
+    task:
+      jobs:
+        - name: test directly on host VM
+          commands:
+            # get the source code
+            - checkout
+            - make test/common bots
+
+            # set up expected users and ssh access to test host
+            - sudo useradd admin && echo admin:foobar | sudo chpasswd
+            - echo root:foobar | sudo chpasswd
+            - sudo sed -i '/PermitRootLogin/ s/no/yes/' /etc/ssh/sshd_config && sudo systemctl restart sshd
+            - sudo mkdir -m  700 /root/.ssh
+            - sudo cp bots/machine/identity.pub /root/.ssh/authorized_keys && sudo chmod 600 /root/.ssh/authorized_keys
+
+            # install dependencies
+            - sudo apt-get install -y cockpit-system cockpit-ws python3-libvirt
+
+            # build and install source
+            - make
+            - sudo make install
+
+            # run test
+            - test/check-application --machine localhost:29920 --browser localhost:9090 -v -t
